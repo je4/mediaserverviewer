@@ -3,7 +3,7 @@ localaddr = ":0"
 resolveraddr = "[::1]:7777"
 resolvertimeout = "10m"
 resolvernotfoundtimeout = "10s"
-dbconn = "%%DATABASE_URL%%"
+iif = "https://localhost:8761/iiif/3"
 concurrency = 3
 
 [servertls]

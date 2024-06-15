@@ -13,6 +13,7 @@ import (
 
 type MediaserverImageConfig struct {
 	LocalAddr               string                 `toml:"localaddr"`
+	ClientDomain            string                 `toml:"clientdomain"`
 	ResolverAddr            string                 `toml:"resolveraddr"`
 	IIIF                    string                 `toml:"iiif"`
 	ResolverTimeout         config.Duration        `toml:"resolvertimeout"`

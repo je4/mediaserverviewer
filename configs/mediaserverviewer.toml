@@ -1,6 +1,8 @@
 #localaddr = ":7685"
 localaddr = ":0"
 resolveraddr = "[::1]:7777"
+serverdomains = ["ubmedia", ""]
+clientdomain = "ubmedia"
 resolvertimeout = "10m"
 resolvernotfoundtimeout = "10s"
 iif = "https://localhost:8761/iiif/3"

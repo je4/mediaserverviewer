@@ -1,0 +1,37 @@
+<html>
+<head>
+    <title>Zoom - <<collection>>.<<signature>></title>
+    <script src="https://openseadragon.github.io/openseadragon/openseadragon.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #openseadragon1 {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="openseadragon1"></div>
+    <script type="text/javascript">
+        var viewer = OpenSeadragon({
+          prefixUrl:          "https://openseadragon.github.io/openseadragon/images/",
+          preserveViewport:   true,
+          visibilityRatio:    1.0,
+            constrainDuringPan: true,
+            id: "openseadragon1",
+            tileSources: [
+                "https://localhost:8761/iiif/3/test/10_3931_e-rara-117673_20230922T115950_master_ver1.zip_10_3931_e-rara-117673_image_29328435.tif/info.json"
+            ]
+        });
+    </script>
+</body>
+</html>

@@ -147,7 +147,7 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msgf("invalid port '%s'", portStr)
 	}
-	srv, err := service.NewImageViewerAction(actionDispatcherClient, host, uint32(port), conf.Concurrency, time.Duration(conf.ResolverNotFoundTimeout), vfs, dbClient, conf.IIIF, logger)
+	srv, err := service.NewViewerAction(actionDispatcherClient, host, uint32(port), conf.Concurrency, time.Duration(conf.ResolverNotFoundTimeout), vfs, dbClient, conf.IIIF, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create service")
 	}

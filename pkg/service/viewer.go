@@ -9,11 +9,6 @@ import (
 	"github.com/je4/mediaserveraction/v2/pkg/actionController"
 	mediaserverproto "github.com/je4/mediaserverproto/v2/pkg/mediaserver/proto"
 	"github.com/je4/utils/v2/pkg/zLogger"
-	_ "golang.org/x/image/bmp"
-	_ "golang.org/x/image/tiff"
-	_ "golang.org/x/image/vp8"
-	_ "golang.org/x/image/vp8l"
-	_ "golang.org/x/image/webp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -28,9 +23,14 @@ var ImageViewerParams = map[string][]string{
 	"iiifzoomviewer": {},
 }
 
-func NewImageViewerAction(adClient mediaserverproto.ActionDispatcherClient, host string, port uint32, concurrency uint32, refreshErrorTimeout time.Duration, vfs fs.FS, db mediaserverproto.DatabaseClient, iiif string, logger zLogger.ZLogger) (*imageViewerAction, error) {
-	_logger := logger.With().Str("rpcService", "imageViewerAction").Logger()
-	return &imageViewerAction{
+var VideoViewerType = "video"
+var VideoViewerParams = map[string][]string{
+	"videoviewer": {},
+}
+
+func NewViewerAction(adClient mediaserverproto.ActionDispatcherClient, host string, port uint32, concurrency uint32, refreshErrorTimeout time.Duration, vfs fs.FS, db mediaserverproto.DatabaseClient, iiif string, logger zLogger.ZLogger) (*viewerAction, error) {
+	_logger := logger.With().Str("rpcService", "viewerAction").Logger()
+	return &viewerAction{
 		iiif:                   iiif,
 		actionDispatcherClient: adClient,
 		done:                   make(chan bool),
@@ -44,7 +44,7 @@ func NewImageViewerAction(adClient mediaserverproto.ActionDispatcherClient, host
 	}, nil
 }
 
-type imageViewerAction struct {
+type viewerAction struct {
 	mediaserverproto.UnimplementedActionServer
 	actionDispatcherClient mediaserverproto.ActionDispatcherClient
 	logger                 zLogger.ZLogger
@@ -58,10 +58,16 @@ type imageViewerAction struct {
 	iiif                   string
 }
 
-func (iva *imageViewerAction) Start() error {
-	actionParams := map[string]*generic.StringList{}
+func (iva *viewerAction) Start() error {
+	imageActionParams := map[string]*generic.StringList{}
 	for action, params := range ImageViewerParams {
-		actionParams[action] = &generic.StringList{
+		imageActionParams[action] = &generic.StringList{
+			Values: params,
+		}
+	}
+	videoActionParams := map[string]*generic.StringList{}
+	for action, params := range VideoViewerParams {
+		videoActionParams[action] = &generic.StringList{
 			Values: params,
 		}
 	}
@@ -70,7 +76,23 @@ func (iva *imageViewerAction) Start() error {
 			waitDuration := iva.refreshErrorTimeout
 			if resp, err := iva.actionDispatcherClient.AddController(context.Background(), &mediaserverproto.ActionDispatcherParam{
 				Type:        ImageViewerType,
-				Actions:     actionParams,
+				Actions:     imageActionParams,
+				Host:        &iva.host,
+				Port:        iva.port,
+				Concurrency: iva.concurrency,
+			}); err != nil {
+				iva.logger.Error().Err(err).Msg("cannot add controller")
+			} else {
+				if resp.GetResponse().GetStatus() != generic.ResultStatus_OK {
+					iva.logger.Error().Err(err).Msgf("cannot add controller: %s", resp.GetResponse().GetMessage())
+				} else {
+					waitDuration = time.Duration(resp.GetNextCallWait()) * time.Second
+					iva.logger.Info().Msgf("controller %s:%d added", iva.host, iva.port)
+				}
+			}
+			if resp, err := iva.actionDispatcherClient.AddController(context.Background(), &mediaserverproto.ActionDispatcherParam{
+				Type:        VideoViewerType,
+				Actions:     videoActionParams,
 				Host:        &iva.host,
 				Port:        iva.port,
 				Concurrency: iva.concurrency,
@@ -95,15 +117,37 @@ func (iva *imageViewerAction) Start() error {
 	return nil
 }
 
-func (iva *imageViewerAction) GracefulStop() {
-	actionParams := map[string]*generic.StringList{}
+func (iva *viewerAction) GracefulStop() {
+	imageActionParams := map[string]*generic.StringList{}
 	for action, params := range ImageViewerParams {
-		actionParams[action] = &generic.StringList{
+		imageActionParams[action] = &generic.StringList{
 			Values: params,
 		}
 	}
 	if resp, err := iva.actionDispatcherClient.RemoveController(context.Background(), &mediaserverproto.ActionDispatcherParam{
 		Type:        ImageViewerType,
+		Actions:     imageActionParams,
+		Host:        &iva.host,
+		Port:        iva.port,
+		Concurrency: iva.concurrency,
+	}); err != nil {
+		iva.logger.Error().Err(err).Msg("cannot remove controller")
+	} else {
+		if resp.GetStatus() != generic.ResultStatus_OK {
+			iva.logger.Error().Err(err).Msgf("cannot remove controller: %s", resp.GetMessage())
+		} else {
+			iva.logger.Info().Msgf("controller %s:%d removed", iva.host, iva.port)
+		}
+
+	}
+	actionParams := map[string]*generic.StringList{}
+	for action, params := range VideoViewerParams {
+		actionParams[action] = &generic.StringList{
+			Values: params,
+		}
+	}
+	if resp, err := iva.actionDispatcherClient.RemoveController(context.Background(), &mediaserverproto.ActionDispatcherParam{
+		Type:        VideoViewerType,
 		Actions:     actionParams,
 		Host:        &iva.host,
 		Port:        iva.port,
@@ -121,7 +165,7 @@ func (iva *imageViewerAction) GracefulStop() {
 	iva.done <- true
 }
 
-func (iva *imageViewerAction) Ping(context.Context, *emptypb.Empty) (*generic.DefaultResponse, error) {
+func (iva *viewerAction) Ping(context.Context, *emptypb.Empty) (*generic.DefaultResponse, error) {
 	return &generic.DefaultResponse{
 		Status:  generic.ResultStatus_OK,
 		Message: "pong",
@@ -129,8 +173,17 @@ func (iva *imageViewerAction) Ping(context.Context, *emptypb.Empty) (*generic.De
 	}, nil
 }
 
-func (iva *imageViewerAction) GetParams(ctx context.Context, param *mediaserverproto.ParamsParam) (*generic.StringList, error) {
-	params, ok := ImageViewerParams[param.GetAction()]
+func (iva *viewerAction) GetParams(ctx context.Context, param *mediaserverproto.ParamsParam) (*generic.StringList, error) {
+	var params []string
+	var ok bool
+	switch param.GetType() {
+	case ImageViewerType:
+		params, ok = ImageViewerParams[param.GetAction()]
+	case VideoViewerType:
+		params, ok = VideoViewerParams[param.GetAction()]
+	default:
+		return nil, status.Errorf(codes.NotFound, "type %s not found", param.GetType())
+	}
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "action %s::%s not found", param.GetType(), param.GetAction())
 	}
@@ -139,7 +192,7 @@ func (iva *imageViewerAction) GetParams(ctx context.Context, param *mediaserverp
 	}, nil
 }
 
-func (iva *imageViewerAction) storeString(str, mime string, action string, item *mediaserverproto.Item, itemCache *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams, format string) (*mediaserverproto.Cache, error) {
+func (iva *viewerAction) storeString(str, mime string, action string, item *mediaserverproto.Item, itemCache *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams, format string) (*mediaserverproto.Cache, error) {
 	itemIdentifier := item.GetIdentifier()
 	cacheName := actionController.CreateCacheName(itemIdentifier.GetCollection(), itemIdentifier.GetSignature(), action, params.String(), format)
 	targetPath := fmt.Sprintf(
@@ -177,7 +230,7 @@ func (iva *imageViewerAction) storeString(str, mime string, action string, item 
 
 }
 
-func (iva *imageViewerAction) Action(ctx context.Context, ap *mediaserverproto.ActionParam) (*mediaserverproto.Cache, error) {
+func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.ActionParam) (*mediaserverproto.Cache, error) {
 	item := ap.GetItem()
 	if item == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "no item defined")
@@ -196,16 +249,39 @@ func (iva *imageViewerAction) Action(ctx context.Context, ap *mediaserverproto.A
 		return nil, status.Errorf(codes.NotFound, "cannot get cache %s/%s/item: %v", itemIdentifier.GetCollection(), itemIdentifier.GetSignature(), err)
 	}
 	action := ap.GetAction()
-	switch strings.ToLower(action) {
-	case "iiifzoomviewer":
-		return iva.iiifZoomViewer(item, cacheItem, storage, ap.GetParams())
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "no action defined")
-
+	if item.GetMetadata().GetType() == "image" {
+		switch strings.ToLower(action) {
+		case "iiifzoomviewer":
+			return iva.iiifZoomViewer(item, cacheItem, storage, ap.GetParams())
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+		}
 	}
+	if item.GetMetadata().GetType() == "video" {
+		switch strings.ToLower(action) {
+		case "videoviewer":
+			return iva.videoViewer(item, cacheItem, storage, ap.GetParams())
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+		}
+	}
+	return nil, status.Errorf(codes.InvalidArgument, "type %s not supported", item.GetMetadata().GetType())
 }
 
-func (iva *imageViewerAction) iiifZoomViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params map[string]string) (*mediaserverproto.Cache, error) {
+func (iva *viewerAction) videoViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params map[string]string) (*mediaserverproto.Cache, error) {
+	var replacements = map[string]string{
+		"<<collection>>": item.GetIdentifier().GetCollection(),
+		"<<signature>>":  item.GetIdentifier().GetSignature(),
+		"<<info>>":       fmt.Sprintf("iiif/3/%s/%s/info.json", item.GetIdentifier().GetCollection(), item.GetIdentifier().GetSignature()),
+	}
+	str := videoViewer
+	for key, value := range replacements {
+		str = strings.ReplaceAll(str, key, value)
+	}
+	return iva.storeString(str, "text/gohtml", "iiifzoomviewer", item, cacheItem, storage, params, "gohtml")
+}
+
+func (iva *viewerAction) iiifZoomViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params map[string]string) (*mediaserverproto.Cache, error) {
 	var replacements = map[string]string{
 		"<<collection>>": item.GetIdentifier().GetCollection(),
 		"<<signature>>":  item.GetIdentifier().GetSignature(),

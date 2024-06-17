@@ -5,10 +5,10 @@ go 1.22.3
 require (
 	emperror.dev/errors v0.8.1
 	github.com/BurntSushi/toml v1.4.0
-	github.com/je4/filesystem/v3 v3.0.3
+	github.com/je4/filesystem/v3 v3.0.9
 	github.com/je4/genericproto/v2 v2.0.3
-	github.com/je4/mediaserveraction/v2 v2.0.11
-	github.com/je4/mediaserverproto/v2 v2.0.30
+	github.com/je4/mediaserveraction/v2 v2.0.17
+	github.com/je4/mediaserverproto/v2 v2.0.35
 	github.com/je4/miniresolver/v2 v2.0.15
 	github.com/je4/trustutil/v2 v2.0.19
 	github.com/je4/utils/v2 v2.0.38
@@ -69,5 +69,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240610135401-a8a62080eff3 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/klog/v2 v2.120.1 // indirect
+	k8s.io/klog/v2 v2.130.0 // indirect
 )

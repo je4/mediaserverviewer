@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"html/template"
 	"io"
 	"io/fs"
 	"strings"
@@ -28,6 +29,13 @@ var VideoViewerParams = map[string][]string{
 	"videoviewer": {},
 }
 
+var templateFuncs = template.FuncMap{
+	"toHTML":     func(str string) template.HTML { return template.HTML(str) },
+	"toHTMLAttr": func(str string) template.HTMLAttr { return template.HTMLAttr(str) },
+	"toJS":       func(str string) template.JS { return template.JS(str) },
+	"toURL":      func(str string) template.URL { return template.URL(str) },
+}
+
 func NewViewerAction(adClient mediaserverproto.ActionDispatcherClient, host string, port uint32, concurrency uint32, refreshErrorTimeout time.Duration, vfs fs.FS, db mediaserverproto.DatabaseClient, iiif string, logger zLogger.ZLogger) (*viewerAction, error) {
 	_logger := logger.With().Str("rpcService", "viewerAction").Logger()
 	return &viewerAction{
@@ -41,6 +49,7 @@ func NewViewerAction(adClient mediaserverproto.ActionDispatcherClient, host stri
 		db:                     db,
 		logger:                 &_logger,
 		concurrency:            concurrency,
+		templates:              map[string]*template.Template{},
 	}, nil
 }
 
@@ -56,6 +65,7 @@ type viewerAction struct {
 	db                     mediaserverproto.DatabaseClient
 	concurrency            uint32
 	iiif                   string
+	templates              map[string]*template.Template
 }
 
 func (iva *viewerAction) Start() error {
@@ -268,28 +278,64 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 	return nil, status.Errorf(codes.InvalidArgument, "type %s not supported", item.GetMetadata().GetType())
 }
 
-func (iva *viewerAction) videoViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params map[string]string) (*mediaserverproto.Cache, error) {
-	var replacements = map[string]string{
-		"<<collection>>": item.GetIdentifier().GetCollection(),
-		"<<signature>>":  item.GetIdentifier().GetSignature(),
-		"<<info>>":       fmt.Sprintf("iiif/3/%s/%s/info.json", item.GetIdentifier().GetCollection(), item.GetIdentifier().GetSignature()),
+func (iva *viewerAction) videoViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	pID := fmt.Sprintf("%s/%s", "videoviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(videoViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse videoviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
 	}
-	str := videoViewer
-	for key, value := range replacements {
-		str = strings.ReplaceAll(str, key, value)
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str, params); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute videoviewer template: %v", err)
 	}
-	return iva.storeString(str, "text/gohtml", "iiifzoomviewer", item, cacheItem, storage, params, "gohtml")
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "videoviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
 }
 
-func (iva *viewerAction) iiifZoomViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params map[string]string) (*mediaserverproto.Cache, error) {
-	var replacements = map[string]string{
-		"<<collection>>": item.GetIdentifier().GetCollection(),
-		"<<signature>>":  item.GetIdentifier().GetSignature(),
-		"<<info>>":       fmt.Sprintf("iiif/3/%s/%s/info.json", item.GetIdentifier().GetCollection(), item.GetIdentifier().GetSignature()),
+func (iva *viewerAction) iiifZoomViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	pID := fmt.Sprintf("%s/%s", "iiifzoomviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(iiifZoomViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse videoviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
 	}
-	str := iiifZoomViewer
-	for key, value := range replacements {
-		str = strings.ReplaceAll(str, key, value)
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str, params); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute iiifZoomViewer template: %v", err)
 	}
-	return iva.storeString(str, "text/gohtml", "iiifzoomviewer", item, cacheItem, storage, params, "gohtml")
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "iiifzoomviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
 }

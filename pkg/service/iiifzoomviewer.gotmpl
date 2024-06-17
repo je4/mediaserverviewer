@@ -30,7 +30,7 @@
         showNavigator:      true,
         id: "openseadragon1",
         tileSources: [
-            "{{.BaseURL}}/<<info>>"
+            {{ toURL `"{{.BaseURL}}/iiif/3/{{ .Collection }}/{{ .Signature }}/info.json"`}}
         ]
     });
 </script>

@@ -24,9 +24,9 @@
             class="video-js vjs-fill"
             controls
             preload="auto"
-            poster="{{.BaseURL}}/<<collection>>/<<signature>>$$shot$$3/item"
+            {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$3/item"` }}
     >
-        <source src="{{.BaseURL}}/<<collection>>/<<signature>>$$web/item" type="video/mp4" />
+        <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item" }}` }} type="video/mp4" />
         <p class="vjs-no-js">
             To view this video please enable JavaScript, and consider upgrading to a
             web browser that

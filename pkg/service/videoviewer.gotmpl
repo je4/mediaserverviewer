@@ -1,3 +1,4 @@
+{{ $data := . }}
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,38 +9,54 @@
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
         .video-js {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: fill;
         }
     </style>
 </head>
-<body class="d-flex h-100 text-center text-bg-dark">
-<div id="video-container" class="cover-container d-flex w-100 h-100 p-0 mx-auto flex-column">
-    <video
-            id="my-video"
-            class="video-js vjs-fill"
-            controls
-            preload="auto"
-            {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$3/item"` }}
-    >
-        <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item" }}` }} type="video/mp4" />
-        <p class="vjs-no-js">
-            To view this video please enable JavaScript, and consider upgrading to a
-            web browser that
-            <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
-        </p>
-    </video></div>
+<body class="d-flex text-center text-bg-dark" style="height: 100vh; background-color: black">
+<table class="table text-center h-100" style="border: none;">
+    <tr>
+        <td colspan="{{ max $data.Shots 1 }}" class="p-0">
+            <div data-vjs-player>
+                <video
+                        id="my-video"
+                        class="video-js"
+                        controls
+                        preload="auto"
+                        {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$3/item"` }}
+                >
+                    <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item" }}` }} type="video/mp4" />
+                    <p class="vjs-no-js">
+                        To view this video please enable JavaScript, and consider upgrading to a
+                        web browser that
+                        <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+                    </p>
+                </video>
+            </div>
+        </td>
+    </tr>
+    {{ if gt $data.Shots 0 }}
+    <tr style="min-height: 80px; height: 0;">
+        {{ $step := div 25 (add $data.Shots 1) }}
+        {{ $partLength := div $data.Duration 24 }}
+        {{ $pos := $step }}
+        {{ range $row := until $data.Shots }}
+        <td class="p-0" style="height: 0;">
+            <a href="javascript:player.currentTime({{ mul (sub $pos 1) $partLength }}); player.play();"><img {{ toHTMLAttr (printf `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$%d/resize/size120x80/formatjpeg" }}` $pos) }} style="width: 100%;"/></a>
+            {{ $pos = add $pos $step }}
+        </td>
+        {{ end }}
+    </tr>
+    {{ end }}
+</table>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 <script>
     const player = videojs('my-video', {
+        fill: true,
         fluid: false,
-        responsive: false,
     });
+
+    func
 </script>
 </body>
 </html>

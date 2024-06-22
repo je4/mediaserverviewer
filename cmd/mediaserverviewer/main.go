@@ -116,6 +116,8 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create server")
 	}
+	defer grpcServer.Shutdown()
+
 	addr := grpcServer.GetAddr()
 	l2 = _logger.With().Str("addr", addr).Logger() //.Output(output)
 	logger = &l2
@@ -166,7 +168,5 @@ func main() {
 	fmt.Println("press ctrl+c to stop server")
 	s := <-done
 	fmt.Println("got signal:", s)
-
-	defer grpcServer.Shutdown()
 
 }

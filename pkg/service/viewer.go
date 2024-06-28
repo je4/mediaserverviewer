@@ -72,6 +72,13 @@ var Definitions = ViewerDefinitions{
 		params:      []string{"shots"},
 		concurrency: 3,
 	},
+	"audioviewer": {
+		Type:        "audio",
+		Subtype:     "",
+		name:        "audioviewer",
+		params:      []string{},
+		concurrency: 3,
+	},
 }
 
 /*
@@ -275,6 +282,14 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
 		}
 	}
+	if item.GetMetadata().GetType() == "audio" {
+		switch strings.ToLower(action) {
+		case "audioviewer":
+			return iva.audioViewer(item, cacheItem, storage, ap.GetParams())
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+		}
+	}
 	return nil, status.Errorf(codes.InvalidArgument, "type %s not supported", item.GetMetadata().GetType())
 }
 
@@ -311,6 +326,44 @@ func (iva *viewerAction) videoViewer(item *mediaserverproto.Item, cacheItem *med
 		Identifier: nil, // valid for all items
 		Metadata: &mediaserverproto.CacheMetadata{
 			Action:   "videoviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
+}
+
+func (iva *viewerAction) audioViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	pID := fmt.Sprintf("%s/%s", "audioviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		maps.Copy(templateFuncs, sprig.FuncMap())
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(audioViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse audioviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
+	}
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str,
+		struct {
+			Duration int64
+		}{
+			Duration: cacheItem.GetMetadata().GetDuration(),
+		},
+	); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute videoviewer template: %v", err)
+	}
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "audioviewer",
 			Params:   params.String(),
 			Width:    0,
 			Height:   0,

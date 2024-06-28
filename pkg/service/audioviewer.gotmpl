@@ -9,20 +9,24 @@
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
         .video-js {
+            background-color: #2d373c;
+        }
+        .vjs-control-bar {
+            display: flex !important;
         }
     </style>
 </head>
 <body class="d-flex text-center text-bg-dark" style="height: 100vh; background-color: black">
 <table class="table text-center h-100" style="border: none;">
     <tr style="height: 100%;">
-        <td colspan="{{ max $data.Shots 1 }}" class="p-0">
+        <td class="p-0">
             <div data-vjs-player>
                 <video
                         id="my-video"
                         class="video-js"
                         controls
                         preload="auto"
-                        {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$3/item"` }}
+                        {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$wave/convert/formatjpeg"` }}
                 >
                     <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item" }}` }} type="video/mp4" />
                     <p class="vjs-no-js">
@@ -34,26 +38,22 @@
             </div>
         </td>
     </tr>
-    {{ if gt $data.Shots 0 }}
-    <tr style="min-height: 80px; height: 0;">
-        {{ $step := div 25 (add $data.Shots 1) }}
-        {{ $partLength := div $data.Duration 24 }}
-        {{ $pos := $step }}
-        {{ range $row := until $data.Shots }}
-        <td class="p-0" style="height: 0;">
-            <a href="javascript:player.currentTime({{ mul (sub $pos 1) $partLength }}); player.play();"><img {{ toHTMLAttr (printf `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$shot$$%d/resize/size120x80/formatjpeg" }}` $pos) }} style="width: 100%;"/></a>
-            {{ $pos = add $pos $step }}
+    <tr style="height: 256px;">
+        <td class="p-0" style="">
+            <img {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$wave/resize/size1280x256/formatjpeg"` }} style="width: 100%; height: 100%;"/>
         </td>
-        {{ end }}
     </tr>
-    {{ end }}
 </table>
+<script>
+    window.HELP_IMPROVE_VIDEOJS = false;
+</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 <script>
     const player = videojs('my-video', {
         fill: true,
         fluid: false,
+
     });
 
     func

@@ -14,21 +14,41 @@
         .vjs-control-bar {
             display: flex !important;
         }
+        #progress {
+            width: 100%;
+            height: {{ if $data.Video }}128px{{ else }}100%{{ end }};
+            background-position: center;
+            background-size: 100% 100%;
+        }
     </style>
 </head>
 <body class="d-flex text-center text-bg-dark" style="height: 100vh; background-color: black">
 <table class="table text-center h-100" style="border: none;">
-    <tr style="height: 100%;">
+    {{ if not $data.Video }}
+        <tr style="height: 100%;">
+            <td class="p-0" style="">
+                <canvas id="progress" width="1280" height="128">
+                    Your browser doesn't support canvas
+                </canvas>
+            </td>
+        </tr>
+    {{ end }}
+    <tr style="height: {{ if $data.Video }}100%{{ else }}30px{{ end }};">
         <td class="p-0">
-            <div data-vjs-player>
+            <div data-vjs-player style="width: 100%;">
                 <video
                         id="my-video"
                         class="video-js"
                         controls
                         preload="auto"
+                    {{ if $data.Video }}
                         {{ toHTMLAttr `poster="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$wave/convert/formatjpeg"` }}
                 >
-                    <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item" }}` }} type="video/mp4" />
+                    <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$video/item"` }} type="video/mp4" />
+                    {{ else }}
+                >
+                        <source {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$web/item"` }} type="audio/mp4" />
+                    {{ end }}
                     <p class="vjs-no-js">
                         To view this video please enable JavaScript, and consider upgrading to a
                         web browser that
@@ -38,11 +58,15 @@
             </div>
         </td>
     </tr>
-    <tr style="height: 256px;">
+    {{ if $data.Video }}
+    <tr style="height: 128px;">
         <td class="p-0" style="">
-            <img {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$wave/resize/size1280x256/formatjpeg"` }} style="width: 100%; height: 100%;"/>
+            <canvas id="progress" width="1280" height="128">
+                Your browser doesn't support canvas
+            </canvas>
         </td>
     </tr>
+    {{ end }}
 </table>
 <script>
     window.HELP_IMPROVE_VIDEOJS = false;
@@ -53,10 +77,43 @@
     const player = videojs('my-video', {
         fill: true,
         fluid: false,
-
+        audioOnlyMode: {{ if not $data.Video }}true{{ else }}false{{ end }},
     });
 
-    func
+    progress = document.getElementById('progress');
+    progress.style.backgroundImage = {{ toJS `"url('{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}$$wave/resize/size1280x128/stretch/formatjpeg')"` }};
+
+    elemLeft = progress.offsetLeft + progress.clientLeft
+    elemTop = progress.offsetTop + progress.clientTop
+    let boundingRect = progress.getBoundingClientRect();
+    let scaleXFactor = progress.width / boundingRect.width;
+    width = progress.width;
+    height = progress.height;
+    ctx = progress.getContext('2d');
+    window.addEventListener("resize", function () {
+        boundingRect = progress.getBoundingClientRect();
+        scaleXFactor = progress.width / boundingRect.width;
+    });
+    progress.addEventListener('click', function(event) {
+        x = event.pageX - elemLeft;
+        y = event.pageY - elemTop;
+        console.log(x, y);
+        player.currentTime(player.duration() * x * scaleXFactor / width);
+        if (player.paused()) {
+            player.play();
+        }
+    }, false);
+
+    player.on('timeupdate', function() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        posx = width * player.currentTime() / player.duration();
+        ctx.moveTo(posx, 0);
+        ctx.lineTo(posx, height);
+        ctx.stroke();
+    });
 </script>
 </body>
 </html>

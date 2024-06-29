@@ -76,7 +76,7 @@ var Definitions = ViewerDefinitions{
 		Type:        "audio",
 		Subtype:     "",
 		name:        "audioviewer",
-		params:      []string{},
+		params:      []string{"video"},
 		concurrency: 3,
 	},
 }
@@ -354,8 +354,10 @@ func (iva *viewerAction) audioViewer(item *mediaserverproto.Item, cacheItem *med
 	if err := tpl.Execute(&str,
 		struct {
 			Duration int64
+			Video    bool
 		}{
 			Duration: cacheItem.GetMetadata().GetDuration(),
+			Video:    params.Has("video"),
 		},
 	); err != nil {
 		return nil, status.Errorf(codes.Internal, "cannot execute videoviewer template: %v", err)

@@ -79,6 +79,27 @@ var Definitions = ViewerDefinitions{
 		params:      []string{"video"},
 		concurrency: 3,
 	},
+	"pdfviewer": {
+		Type:        "text",
+		Subtype:     "pdf",
+		name:        "pdfviewer",
+		params:      []string{},
+		concurrency: 3,
+	},
+	"replaywebviewer": {
+		Type:        "archive",
+		Subtype:     "wacz",
+		name:        "replaywebviewer",
+		params:      []string{"url"},
+		concurrency: 3,
+	},
+	"replay": {
+		Type:        "archive",
+		Subtype:     "wacz",
+		name:        "replay",
+		params:      []string{"sw.js"},
+		concurrency: 3,
+	},
 }
 
 /*
@@ -271,7 +292,7 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 		case "iiifzoomviewer":
 			return iva.iiifZoomViewer(item, cacheItem, storage, ap.GetParams())
 		default:
-			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
 		}
 	}
 	if item.GetMetadata().GetType() == "video" {
@@ -279,7 +300,7 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 		case "videoviewer":
 			return iva.videoViewer(item, cacheItem, storage, ap.GetParams())
 		default:
-			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
 		}
 	}
 	if item.GetMetadata().GetType() == "audio" {
@@ -287,7 +308,39 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 		case "audioviewer":
 			return iva.audioViewer(item, cacheItem, storage, ap.GetParams())
 		default:
-			return nil, status.Errorf(codes.InvalidArgument, "no action defined")
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
+		}
+	}
+	if item.GetMetadata().GetType() == "text" && item.GetMetadata().GetSubtype() == "pdf" {
+		switch strings.ToLower(action) {
+		case "pdfviewer":
+			return iva.pdfViewer(item, cacheItem, storage, ap.GetParams())
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
+		}
+	}
+	if item.GetMetadata().GetType() == "archive" && item.GetMetadata().GetSubtype() == "wacz" {
+		switch strings.ToLower(action) {
+		case "replaywebviewer":
+			return iva.replaywebViewer(item, cacheItem, storage, ap.GetParams())
+		case "replay":
+			str := "importScripts(\"https://cdn.jsdelivr.net/npm/replaywebpage@2.1.0/sw.js\");"
+			return &mediaserverproto.Cache{
+				Identifier: nil, // valid for all items
+				Metadata: &mediaserverproto.CacheMetadata{
+					Action:   "videoviewer",
+					Params:   "sw.js",
+					Width:    0,
+					Height:   0,
+					Duration: 0,
+					Size:     int64(len(str)),
+					MimeType: "text/javascript",
+					Path:     "data:text/javascript," + str,
+					Storage:  nil,
+				},
+			}, nil
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
 		}
 	}
 	return nil, status.Errorf(codes.InvalidArgument, "type %s not supported", item.GetMetadata().GetType())
@@ -397,6 +450,81 @@ func (iva *viewerAction) iiifZoomViewer(item *mediaserverproto.Item, cacheItem *
 		Identifier: nil, // valid for all items
 		Metadata: &mediaserverproto.CacheMetadata{
 			Action:   "iiifzoomviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
+}
+
+func (iva *viewerAction) pdfViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	// todo: get rid of cdn stuff
+	pID := fmt.Sprintf("%s/%s", "pdfviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		maps.Copy(templateFuncs, sprig.FuncMap())
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(pdfViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse videoviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
+	}
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str,
+		struct {
+		}{},
+	); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute videoviewer template: %v", err)
+	}
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "pdfviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
+}
+
+func (iva *viewerAction) replaywebViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	// todo: get rid of cdn stuff
+	pID := fmt.Sprintf("%s/%s", "replaywebviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		maps.Copy(templateFuncs, sprig.FuncMap())
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(replayWebViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse replaywebviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
+	}
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str,
+		struct {
+			Url string
+		}{
+			Url: params.Get("url"),
+		},
+	); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute replaywebviewer template: %v", err)
+	}
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "replaywebviewer",
 			Params:   params.String(),
 			Width:    0,
 			Height:   0,

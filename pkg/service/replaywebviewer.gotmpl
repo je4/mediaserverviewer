@@ -1,0 +1,15 @@
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ReplayWeb.page Viewer</title>
+</head>
+<body>
+<script {{ toHTMLAttr `src="{{.BaseURL}}/static/replayweb/js/ui.js"` }}></script>
+<replay-web-page
+    {{ toHTMLAttr `replayBase="{{.BaseURL}}/static/replayweb/js/"` }}
+    {{ toHTMLAttr `src="{{.BaseURL}}/{{ .Collection }}/{{ .Signature }}/item"` }}
+    {{ if ne .Url "" }}url="{{.Url}}"{{ end }}
+    style="width: 100%; height: 100%;"></replay-web-page>
+</body>
+</html>

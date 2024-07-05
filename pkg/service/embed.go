@@ -10,3 +10,9 @@ var videoViewer string
 
 //go:embed audioviewer.gotmpl
 var audioViewer string
+
+//go:embed pdfviewer.gotmpl
+var pdfViewer string
+
+//go:embed replaywebviewer.gotmpl
+var replayWebViewer string

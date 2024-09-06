@@ -4,23 +4,20 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"github.com/je4/certloader/v2/pkg/loader"
 	"github.com/je4/filesystem/v3/pkg/vfsrw"
 	mediaserverproto "github.com/je4/mediaserverproto/v2/pkg/mediaserver/proto"
 	"github.com/je4/mediaserverviewer/v2/configs"
 	"github.com/je4/mediaserverviewer/v2/pkg/service"
-	resolver "github.com/je4/miniresolver/v2/pkg/resolver"
-	"github.com/je4/trustutil/v2/pkg/grpchelper"
-	"github.com/je4/trustutil/v2/pkg/loader"
+	"github.com/je4/miniresolver/v2/pkg/resolver"
 	"github.com/je4/utils/v2/pkg/zLogger"
 	ublogger "gitlab.switch.ch/ub-unibas/go-ublogger"
 	"io"
 	"io/fs"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 )
@@ -51,6 +48,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("cannot get hostname: %v", err)
 	}
+
+	instance := "instance_" + conf.Instance
 
 	var loggerTLSConfig *tls.Config
 	var loggerLoader io.Closer
@@ -90,7 +89,7 @@ func main() {
 
 	// create TLS Certificate.
 	// the certificate MUST contain <package>.<service> as DNS name
-	serverTLSConfig, serverLoader, err := loader.CreateServerLoader(true, &conf.ServerTLS, nil, logger)
+	serverTLSConfig, serverLoader, err := loader.CreateServerLoader(true, &conf.Server, nil, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create server loader")
 	}
@@ -98,7 +97,7 @@ func main() {
 
 	// create client TLS certificate
 	// the certificate MUST contain "grpc:miniresolverproto.MiniResolver" or "*" in URIs
-	clientTLSConfig, clientLoader, err := loader.CreateClientLoader(&conf.ClientTLS, logger)
+	clientTLSConfig, clientLoader, err := loader.CreateClientLoader(&conf.Client, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create client loader")
 	}
@@ -112,44 +111,35 @@ func main() {
 	defer resolverClient.Close()
 
 	// create grpc server with resolver for name resolution
-	grpcServer, err := grpchelper.NewServer(conf.LocalAddr, serverTLSConfig, nil, logger)
+	grpcServer, err := resolverClient.NewServer(conf.LocalAddr, []string{instance}, true)
+	//grpcServer, err := grpchelper.NewServer(conf.LocalAddr, serverTLSConfig, nil, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create server")
 	}
-	defer grpcServer.Shutdown()
 
 	addr := grpcServer.GetAddr()
 	l2 = _logger.With().Str("addr", addr).Logger() //.Output(output)
 	logger = &l2
 
-	var domainPrefix string
-	if conf.ClientDomain != "" {
-		domainPrefix = conf.ClientDomain + "."
-	}
-	actionDispatcherClient, err := resolver.NewClient[mediaserverproto.ActionDispatcherClient](resolverClient, mediaserverproto.NewActionDispatcherClient, domainPrefix+mediaserverproto.ActionDispatcher_ServiceDesc.ServiceName)
+	actionDispatcherClients, err := resolver.NewClients[mediaserverproto.ActionDispatcherClient](resolverClient,
+		mediaserverproto.NewActionDispatcherClient,
+		mediaserverproto.ActionDispatcher_ServiceDesc.ServiceName, conf.Domains)
 	if err != nil {
 		logger.Panic().Msgf("cannot create mediaserveractiondispatcher grpc client: %v", err)
 	}
-	resolver.DoPing(actionDispatcherClient, logger)
+	for _, actionDispatcherClient := range actionDispatcherClients {
+		resolver.DoPing(actionDispatcherClient, logger)
+	}
 
-	dbClient, err := resolver.NewClient[mediaserverproto.DatabaseClient](resolverClient, mediaserverproto.NewDatabaseClient, domainPrefix+mediaserverproto.Database_ServiceDesc.ServiceName)
+	dbClients, err := resolver.NewClients[mediaserverproto.DatabaseClient](resolverClient, mediaserverproto.NewDatabaseClient, mediaserverproto.Database_ServiceDesc.ServiceName, conf.Domains)
 	if err != nil {
 		logger.Panic().Msgf("cannot create mediaserverdb grpc client: %v", err)
 	}
-	resolver.DoPing(dbClient, logger)
+	for _, dbClient := range dbClients {
+		resolver.DoPing(dbClient, logger)
+	}
 
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		logger.Fatal().Err(err).Msgf("invalid addr '%s' in config", conf.LocalAddr)
-	}
-	if host == "::" {
-		host = ""
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		logger.Fatal().Err(err).Msgf("invalid port '%s'", portStr)
-	}
-	srv, err := service.NewViewerAction(actionDispatcherClient, host, uint32(port), conf.Concurrency, time.Duration(conf.ResolverNotFoundTimeout), vfs, dbClient, conf.IIIF, logger)
+	srv, err := service.NewActionService(actionDispatcherClients, conf.Instance, conf.Domains, conf.Concurrency, conf.QueueSize, time.Duration(conf.ResolverNotFoundTimeout), vfs, dbClients, conf.IIIF, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("cannot create service")
 	}
@@ -169,4 +159,5 @@ func main() {
 	s := <-done
 	fmt.Println("got signal:", s)
 
+	defer grpcServer.Shutdown()
 }

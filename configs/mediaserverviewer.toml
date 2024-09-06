@@ -1,33 +1,69 @@
 #localaddr = ":7685"
 localaddr = ":0"
 resolveraddr = "[::1]:7777"
-serverdomains = ["ubmedia", ""]
-clientdomain = "ubmedia"
+domains = ["ubmedia"]
+#domains = ["ubmedia", "mediathek"]
+instance = "ubviewer"
 resolvertimeout = "10m"
 resolvernotfoundtimeout = "10s"
 iif = "https://localhost:8761/iiif/3"
 concurrency = 3
 
-[servertls]
-type = "dev"
+[server]
+type = "minivault"
+initialtimeout = "1h"
+[server.minivault]
+baseurl = "https://localhost:8759/api/v1"
+parenttoken = "pa.2dde0885fe7822bb.c1dc2de5de39c666" #pa.2dc483e73851c137.15d94e61e0b377f1
+tokentype = "server_cert"
+tokenpolicies = ["instance_ubviewer.mediaserveraction"]
+tokeninterval = "1h"
+tokenttl = "2h"
+certtype = "server_cert"
+dnss = ["instance_ubviewer.mediaserverproto.Action"]
+uris = []
+ips = []
+certinterval = "8m"
+certttl = "10m"
+ca = ["certs/minivault.ca.pem"]
+usesystempool = false
 
-[clienttls]
-type = "dev"
-
-[log]
-level = "debug"
+[client]
+type = "minivault"
+initialtimeout = "1h"
+[client.minivault]
+baseurl = "https://localhost:8759/api/v1"
+parenttoken = "pa.2dde0885fe7822bb.c1dc2de5de39c666" #pa.2dc483e73851c137.15d94e61e0b377f1
+tokentype = "client_cert"
+tokenpolicies = ["instance_ubviewer.mediaserveraction"]
+tokeninterval = "1h"
+tokenttl = "2h"
+certtype = "client_cert"
+dnss = []
+uris = [
+    "grpc:miniresolverproto.MiniResolver",
+    "grpc:ubmedia.mediaserverproto.Database",
+    "grpc:mediathek.mediaserverproto.Database",
+    "grpc:ubmedia.mediaserverproto.ActionDispatcher",
+    "grpc:mediathek.mediaserverproto.ActionDispatcher"]
+ips = []
+certinterval = "8m"
+certttl = "10m"
+ca = ["certs/minivault.ca.pem"]
+usesystempool = false
 
 [log.stash]
 #logstash_host="sb-uwf4.swissbib.unibas.ch"
 logstashhost="localhost"
 logstashport=5046
 logstashtracelevel="ERROR"
-namespace="mediaserverviewer"
+namespace="ubviewer"
 dataset=""
 #dataset="logs-mediaserver"
 [log.stash.tls]
 type="file"
-cert="certs/ub-log.ub.unibas.ch.cert.pem"
-key="certs/ub-log.ub.unibas.ch.key.pem"
 ca=["certs/ca.crt"]
 interval="1h"
+[log.stash.tls.file]
+cert="certs/ub-log.ub.unibas.ch.cert.pem"
+key="certs/ub-log.ub.unibas.ch.key.pem"

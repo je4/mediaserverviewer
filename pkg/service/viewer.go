@@ -12,6 +12,7 @@ import (
 	"github.com/je4/utils/v2/pkg/zLogger"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"html/template"
@@ -32,13 +33,13 @@ type ViewerDefinition struct {
 
 type ViewerDefinitions map[string]*ViewerDefinition
 
-func (vd ViewerDefinitions) StringList() map[string]map[string]*generic.StringList {
-	result := map[string]map[string]*generic.StringList{}
+func (vd ViewerDefinitions) StringListMap() map[string]*mediaserverproto.StringListMap {
+	result := map[string]*mediaserverproto.StringListMap{}
 	for _, v := range vd {
 		if _, ok := result[v.Type]; !ok {
-			result[v.Type] = map[string]*generic.StringList{}
+			result[v.Type] = &mediaserverproto.StringListMap{Values: map[string]*generic.StringList{}}
 		}
-		result[v.Type][v.name] = &generic.StringList{
+		result[v.Type].Values[v.name] = &generic.StringList{
 			Values: v.params,
 		}
 	}
@@ -121,51 +122,53 @@ var templateFuncs = template.FuncMap{
 	"toURL":      func(str string) template.URL { return template.URL(str) },
 }
 
-func NewViewerAction(adClient mediaserverproto.ActionDispatcherClient, host string, port uint32, concurrency uint32, refreshErrorTimeout time.Duration, vfs fs.FS, db mediaserverproto.DatabaseClient, iiif string, logger zLogger.ZLogger) (*viewerAction, error) {
+func NewActionService(adClients map[string]mediaserverproto.ActionDispatcherClient, instance string, domains []string, concurrency, queueSize uint32, refreshErrorTimeout time.Duration, vfs fs.FS, dbs map[string]mediaserverproto.DatabaseClient, iiif string, logger zLogger.ZLogger) (*viewerAction, error) {
 	_logger := logger.With().Str("rpcService", "viewerAction").Logger()
 	return &viewerAction{
-		iiif:                   iiif,
-		actionDispatcherClient: adClient,
-		done:                   make(chan bool),
-		host:                   host,
-		port:                   port,
-		refreshErrorTimeout:    refreshErrorTimeout,
-		vFS:                    vfs,
-		db:                     db,
-		logger:                 &_logger,
-		concurrency:            concurrency,
-		templates:              map[string]*template.Template{},
-		definitions:            Definitions.StringList(),
+		iiif:                    iiif,
+		actionDispatcherClients: adClients,
+		done:                    make(chan bool),
+		instance:                instance,
+		domains:                 domains,
+		refreshErrorTimeout:     refreshErrorTimeout,
+		vFS:                     vfs,
+		dbs:                     dbs,
+		logger:                  &_logger,
+		concurrency:             concurrency,
+		queueSize:               queueSize,
+		templates:               map[string]*template.Template{},
+		definitions:             Definitions.StringListMap(),
 	}, nil
 }
 
 type viewerAction struct {
 	mediaserverproto.UnimplementedActionServer
-	actionDispatcherClient mediaserverproto.ActionDispatcherClient
-	logger                 zLogger.ZLogger
-	done                   chan bool
-	host                   string
-	port                   uint32
-	refreshErrorTimeout    time.Duration
-	vFS                    fs.FS
-	db                     mediaserverproto.DatabaseClient
-	concurrency            uint32
-	iiif                   string
-	templates              map[string]*template.Template
-	definitions            map[string]map[string]*generic.StringList
+	actionDispatcherClients map[string]mediaserverproto.ActionDispatcherClient
+	logger                  zLogger.ZLogger
+	done                    chan bool
+	refreshErrorTimeout     time.Duration
+	vFS                     fs.FS
+	dbs                     map[string]mediaserverproto.DatabaseClient
+	iiif                    string
+	templates               map[string]*template.Template
+	definitions             map[string]*mediaserverproto.StringListMap
+	concurrency             uint32
+	queueSize               uint32
+	instance                string
+	domains                 []string
 }
 
 func (iva *viewerAction) Start() error {
 	go func() {
 		for {
 			waitDuration := iva.refreshErrorTimeout
-			for t, defs := range iva.definitions {
-				if resp, err := iva.actionDispatcherClient.AddController(context.Background(), &mediaserverproto.ActionDispatcherParam{
-					Type:        t,
-					Actions:     defs,
-					Host:        &iva.host,
-					Port:        iva.port,
+			for _, adClient := range iva.actionDispatcherClients {
+				if resp, err := adClient.AddController(context.Background(), &mediaserverproto.ActionDispatcherParam{
+					Actions:     iva.definitions,
+					Domains:     iva.domains,
+					Name:        iva.instance,
 					Concurrency: iva.concurrency,
+					QueueSize:   iva.queueSize,
 				}); err != nil {
 					iva.logger.Error().Err(err).Msg("cannot add controller")
 				} else {
@@ -173,7 +176,7 @@ func (iva *viewerAction) Start() error {
 						iva.logger.Error().Err(err).Msgf("cannot add controller: %s", resp.GetResponse().GetMessage())
 					} else {
 						waitDuration = time.Duration(resp.GetNextCallWait()) * time.Second
-						iva.logger.Info().Msgf("controller %s:%d added", iva.host, iva.port)
+						iva.logger.Info().Msgf("controller %v %v -> %v added", iva.definitions, iva.instance, iva.domains)
 					}
 				}
 			}
@@ -189,20 +192,20 @@ func (iva *viewerAction) Start() error {
 }
 
 func (iva *viewerAction) GracefulStop() {
-	for t, defs := range iva.definitions {
-		if resp, err := iva.actionDispatcherClient.RemoveController(context.Background(), &mediaserverproto.ActionDispatcherParam{
-			Type:        t,
-			Actions:     defs,
-			Host:        &iva.host,
-			Port:        iva.port,
+	for _, adClient := range iva.actionDispatcherClients {
+		if resp, err := adClient.RemoveController(context.Background(), &mediaserverproto.ActionDispatcherParam{
+			Actions:     iva.definitions,
+			Domains:     iva.domains,
+			Name:        iva.instance,
 			Concurrency: iva.concurrency,
+			QueueSize:   iva.queueSize,
 		}); err != nil {
 			iva.logger.Error().Err(err).Msg("cannot remove controller")
 		} else {
 			if resp.GetStatus() != generic.ResultStatus_OK {
 				iva.logger.Error().Err(err).Msgf("cannot remove controller: %s", resp.GetMessage())
 			} else {
-				iva.logger.Info().Msgf("controller %s:%d removed", iva.host, iva.port)
+				iva.logger.Info().Msgf("controller %v %v -> %v removed", iva.definitions, iva.instance, iva.domains)
 			}
 		}
 	}
@@ -223,7 +226,7 @@ func (iva *viewerAction) GetParams(ctx context.Context, param *mediaserverproto.
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "type %s not found", param.GetType())
 	}
-	result, ok := typeActions[param.GetAction()]
+	result, ok := typeActions.Values[param.GetAction()]
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "action %s::%s not found", param.GetType(), param.GetAction())
 	}
@@ -269,6 +272,11 @@ func (iva *viewerAction) storeString(str, mime string, action string, item *medi
 }
 
 func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.ActionParam) (*mediaserverproto.Cache, error) {
+	domains := metadata.ValueFromIncomingContext(ctx, "domain")
+	var domain string
+	if len(domains) > 0 {
+		domain = domains[0]
+	}
 	item := ap.GetItem()
 	if item == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "no item defined")
@@ -278,7 +286,11 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 	if storage == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "no storage defined")
 	}
-	cacheItem, err := iva.db.GetCache(context.Background(), &mediaserverproto.CacheRequest{
+	db, ok := iva.dbs[domain]
+	if !ok {
+		return nil, status.Errorf(codes.InvalidArgument, "no database for domain %s", domain)
+	}
+	cacheItem, err := db.GetCache(context.Background(), &mediaserverproto.CacheRequest{
 		Identifier: itemIdentifier,
 		Action:     "item",
 		Params:     "",

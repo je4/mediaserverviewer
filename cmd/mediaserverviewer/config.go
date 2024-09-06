@@ -3,27 +3,29 @@ package main
 import (
 	"emperror.dev/errors"
 	"github.com/BurntSushi/toml"
+	"github.com/je4/certloader/v2/pkg/loader"
 	"github.com/je4/filesystem/v3/pkg/vfsrw"
-	loaderConfig "github.com/je4/trustutil/v2/pkg/config"
 	"github.com/je4/utils/v2/pkg/config"
-	"github.com/je4/utils/v2/pkg/zLogger"
+	"github.com/je4/utils/v2/pkg/stashconfig"
 	"io/fs"
 	"os"
 )
 
 type MediaserverImageConfig struct {
-	LocalAddr               string                 `toml:"localaddr"`
-	ClientDomain            string                 `toml:"clientdomain"`
-	ResolverAddr            string                 `toml:"resolveraddr"`
-	IIIF                    string                 `toml:"iiif"`
-	ResolverTimeout         config.Duration        `toml:"resolvertimeout"`
-	ResolverNotFoundTimeout config.Duration        `toml:"resolvernotfoundtimeout"`
-	ServerTLS               loaderConfig.TLSConfig `toml:"servertls"`
-	ClientTLS               loaderConfig.TLSConfig `toml:"clienttls"`
-	GRPCClient              map[string]string      `toml:"grpcclient"`
-	VFS                     map[string]*vfsrw.VFS  `toml:"vfs"`
+	LocalAddr               string                `toml:"localaddr"`
+	ResolverAddr            string                `toml:"resolveraddr"`
+	IIIF                    string                `toml:"iiif"`
+	Domains                 []string              `toml:"domains"`
+	Instance                string                `toml:"instance"`
+	QueueSize               uint32                `toml:"queuesize"`
+	ResolverTimeout         config.Duration       `toml:"resolvertimeout"`
+	ResolverNotFoundTimeout config.Duration       `toml:"resolvernotfoundtimeout"`
+	Server                  loader.Config         `toml:"server"`
+	Client                  loader.Config         `toml:"client"`
+	GRPCClient              map[string]string     `toml:"grpcclient"`
+	VFS                     map[string]*vfsrw.VFS `toml:"vfs"`
 	Concurrency             uint32
-	Log                     zLogger.Config `toml:"log"`
+	Log                     stashconfig.Config `toml:"log"`
 }
 
 func LoadMediaserverImageConfig(fSys fs.FS, fp string, conf *MediaserverImageConfig) error {

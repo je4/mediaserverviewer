@@ -14,17 +14,17 @@ type = "minivault"
 initialtimeout = "1h"
 [server.minivault]
 baseurl = "https://localhost:8759/api/v1"
-parenttoken = "pa.2dde0885fe7822bb.c1dc2de5de39c666" #pa.2dc483e73851c137.15d94e61e0b377f1
+parenttoken = "pa.2dd2f1933f4bf79b.70e65cc35470d195" #pa.2dc483e73851c137.15d94e61e0b377f1
 tokentype = "server_cert"
 tokenpolicies = ["instance_ubviewer.mediaserveraction"]
-tokeninterval = "1h"
-tokenttl = "2h"
+tokeninterval = "48h"
+tokenttl = "96h"
 certtype = "server_cert"
 dnss = ["instance_ubviewer.mediaserverproto.Action"]
 uris = []
 ips = []
-certinterval = "8m"
-certttl = "10m"
+certinterval = "24h"
+certttl = "48h"
 ca = ["certs/minivault.ca.pem"]
 usesystempool = false
 
@@ -33,11 +33,11 @@ type = "minivault"
 initialtimeout = "1h"
 [client.minivault]
 baseurl = "https://localhost:8759/api/v1"
-parenttoken = "pa.2dde0885fe7822bb.c1dc2de5de39c666" #pa.2dc483e73851c137.15d94e61e0b377f1
+parenttoken = "pa.2dd2f1933f4bf79b.70e65cc35470d195" #pa.2dc483e73851c137.15d94e61e0b377f1
 tokentype = "client_cert"
 tokenpolicies = ["instance_ubviewer.mediaserveraction"]
-tokeninterval = "1h"
-tokenttl = "2h"
+tokeninterval = "48h"
+tokenttl = "96h"
 certtype = "client_cert"
 dnss = []
 uris = [
@@ -47,8 +47,8 @@ uris = [
     "grpc:ubmedia.mediaserverproto.ActionDispatcher",
     "grpc:mediathek.mediaserverproto.ActionDispatcher"]
 ips = []
-certinterval = "8m"
-certttl = "10m"
+certinterval = "24h"
+certttl = "48h"
 ca = ["certs/minivault.ca.pem"]
 usesystempool = false
 

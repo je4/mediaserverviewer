@@ -87,6 +87,13 @@ var Definitions = ViewerDefinitions{
 		params:      []string{},
 		concurrency: 3,
 	},
+	"foliateviewer": {
+		Type:        "text",
+		Subtype:     "epub",
+		name:        "foliateviewer",
+		params:      []string{},
+		concurrency: 3,
+	},
 	"replaywebviewer": {
 		Type:        "archive",
 		Subtype:     "wacz",
@@ -331,6 +338,14 @@ func (iva *viewerAction) Action(ctx context.Context, ap *mediaserverproto.Action
 			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
 		}
 	}
+	if item.GetMetadata().GetType() == "text" && item.GetMetadata().GetSubtype() == "epub" {
+		switch strings.ToLower(action) {
+		case "foliateviewer":
+			return iva.foliateJSViewer(item, cacheItem, storage, ap.GetParams())
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "no action defined for %s::%s/%s", item.GetMetadata().GetType(), item.GetMetadata().GetSubtype(), action)
+		}
+	}
 	if item.GetMetadata().GetType() == "archive" && item.GetMetadata().GetSubtype() == "wacz" {
 		switch strings.ToLower(action) {
 		case "replaywebviewer":
@@ -537,6 +552,45 @@ func (iva *viewerAction) replaywebViewer(item *mediaserverproto.Item, cacheItem 
 		Identifier: nil, // valid for all items
 		Metadata: &mediaserverproto.CacheMetadata{
 			Action:   "replaywebviewer",
+			Params:   params.String(),
+			Width:    0,
+			Height:   0,
+			Duration: 0,
+			Size:     int64(len(str.String())),
+			MimeType: "text/html",
+			Path:     "data:text/gohtml," + str.String(),
+			Storage:  nil,
+		},
+	}, nil
+}
+
+func (iva *viewerAction) foliateJSViewer(item *mediaserverproto.Item, cacheItem *mediaserverproto.Cache, storage *mediaserverproto.Storage, params actionCache.ActionParams) (*mediaserverproto.Cache, error) {
+	// todo: get rid of cdn stuff
+	pID := fmt.Sprintf("%s/%s", "foliatejsviewer", params.String())
+	tpl, ok := iva.templates[pID]
+	if !ok {
+		maps.Copy(templateFuncs, sprig.FuncMap())
+		tmpl, err := template.New(pID).Funcs(templateFuncs).Parse(foliateJSViewer)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "cannot parse replaywebviewer template: %v", err)
+		}
+		iva.templates[pID] = tmpl
+		tpl = tmpl
+	}
+	var str = strings.Builder{}
+	if err := tpl.Execute(&str,
+		struct {
+			Url string
+		}{
+			Url: params.Get("url"),
+		},
+	); err != nil {
+		return nil, status.Errorf(codes.Internal, "cannot execute replaywebviewer template: %v", err)
+	}
+	return &mediaserverproto.Cache{
+		Identifier: nil, // valid for all items
+		Metadata: &mediaserverproto.CacheMetadata{
+			Action:   "foliatejsviewer",
 			Params:   params.String(),
 			Width:    0,
 			Height:   0,

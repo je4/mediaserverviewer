@@ -16,3 +16,6 @@ var pdfViewer string
 
 //go:embed replaywebviewer.gotmpl
 var replayWebViewer string
+
+//go:embed foliatejsviewer.gotmpl
+var foliateJSViewer string
